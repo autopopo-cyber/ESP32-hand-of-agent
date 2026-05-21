@@ -1,0 +1,54 @@
+; ODA HID Bridge - CDC ACM driver for Windows
+; Right-click device in Device Manager → Update driver → Browse → point to this folder
+
+[Version]
+Signature="$Windows NT$"
+Class=Ports
+ClassGuid={4D36E978-E325-11CE-BFC1-08002BE10318}
+Provider=%ODA%
+DriverVer=05/21/2026,1.0.0.0
+CatalogFile=oda_cdc.cat
+PnpLockdown=1
+
+[Manufacturer]
+%ODA%=ODA,NTamd64
+
+[ODA.NTamd64]
+%ODA_CDC%=ODA_CDC_Install,USB\VID_303A&PID_4009&MI_00
+
+[SourceDisksNames]
+1="ODA CDC Driver",,,
+
+[SourceDisksFiles]
+usbser.sys=1
+
+[DestinationDirs]
+DefaultDestDir=12
+ODA_CDC_Install.NT.Copy=12
+
+[ODA_CDC_Install]
+Include=mdmcpq.inf
+CopyFiles=ODA_CDC_Install.NT.Copy
+AddReg=ODA_CDC_AddReg
+
+[ODA_CDC_Install.NT.Copy]
+usbser.sys
+
+[ODA_CDC_Install.NT.Services]
+AddService=usbser,0x00000002,ODA_CDC_Service
+
+[ODA_CDC_Service]
+DisplayName=%ODA_CDC%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\usbser.sys
+
+[ODA_CDC_AddReg]
+HKR,,DevConfig,,0
+HKR,,DeviceInterfaceGUID,,{4D36E978-E325-11CE-BFC1-08002BE10318}
+HKR,,NTMPrompt,,0
+
+[Strings]
+ODA="ODA"
+ODA_CDC="ODA HID Bridge CDC ACM"
