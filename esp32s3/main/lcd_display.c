@@ -7,7 +7,7 @@
 #include "esp_timer.h"
 #include "hid_executor.h"
 #include "tusb.h"
-#include "OL_POV_00073_.h"
+#include "splash.h"
 #include <stdio.h>
 #include <string.h>
 
