@@ -2,11 +2,14 @@
 import sys, os
 from PIL import Image
 
-W, H = 172, 320
+# 帧缓冲尺寸 (swap_xy 后: 320=垂直, 172=水平)
+W, H = 320, 172
 
 def png_to_rgb565(path, out_dir):
     img = Image.open(path).convert("RGB")
-    # Resize to fit 172x320, preserving aspect ratio, center-crop
+    # 旋转 90° CW: 竖版原图 → 横版填 320x172 帧缓冲
+    img = img.transpose(Image.ROTATE_270)
+
     iw, ih = img.size
     scale = max(W / iw, H / ih)
     nw, nh = int(iw * scale), int(ih * scale)
@@ -20,7 +23,6 @@ def png_to_rgb565(path, out_dir):
     for y in range(H):
         for x in range(W):
             r, g, b = img.getpixel((x, y))
-            # RGB565 with software inversion (compensates ST7789 hardware inversion)
             rgb565 = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
             inv = ~rgb565 & 0xFFFF
             pixels.append(f"0x{inv:04X}")
