@@ -149,8 +149,8 @@ void lcd_draw_splash(void) {
     memcpy(draw_buf, splash_image, SPLASH_W * SPLASH_H * 2);
 
     // 底部黑色条 + 文字 (16px 字体)
-    fb_fill_rect(0, 0, 22, 172, ~0x0000 & 0xFFFF);
-    fb_draw_string(4, 4, "ODA v25 DEBUG", ~0x07E0 & 0xFFFF, 1);
+    fb_fill_rect(0, 0, 22, 172, 0x0000);
+    fb_draw_string(4, 4, "ODA v25 DEBUG", 0x07E0, 1);
 
     fb_flush();
 }
@@ -225,8 +225,8 @@ void lcd_load_random_splash(void) {
     if (err == ESP_OK) {
         char label[64];
         snprintf(label, sizeof(label), "ODA HID #%lu/%lu", idx + 1, count);
-        fb_fill_rect(0, 0, 22, 172, ~0x0000 & 0xFFFF);
-        fb_draw_string(4, 4, label, ~0x07E0 & 0xFFFF, 1);
+        fb_fill_rect(0, 0, 22, 172, 0x0000);
+        fb_draw_string(4, 4, label, 0x07E0, 1);
         fb_flush();
         return;
     }
