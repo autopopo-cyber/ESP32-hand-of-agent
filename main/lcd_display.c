@@ -150,26 +150,41 @@ void lcd_draw_splash(void) {
 
     // 底部黑色条 + 文字 (16px 字体)
     fb_fill_rect(0, 0, 22, 172, ~0x0000 & 0xFFFF);
-    fb_draw_string(4, 4, "ODA HID Bridge", ~0x07E0 & 0xFFFF, 1);
+    fb_draw_string(4, 4, "ODA v25 DEBUG", ~0x07E0 & 0xFFFF, 1);
 
     fb_flush();
 }
 
 void lcd_load_random_splash(void) {
+    char diag[64];
     const esp_partition_t *part = esp_partition_find_first(
         ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
     if (!part) {
-        ESP_LOGW("lcd", "No storage partition, using built-in splash");
+        // Show diagnostic: partition not found
+        fb_clear(COLOR_BG);
+        fb_draw_string(4, 4, "ERR: no part", COLOR_TEXT, 1);
+        fb_flush();
+        vTaskDelay(pdMS_TO_TICKS(5000));
         lcd_draw_splash();
         return;
     }
 
     uint32_t header[4];
     esp_err_t err = esp_partition_read(part, 0, header, sizeof(header));
+
+    // Show raw header on screen
+    fb_clear(COLOR_BG);
+    snprintf(diag, sizeof(diag), "M:%08lx C:%lu", header[0], header[1]);
+    fb_draw_string(4, 4, diag, COLOR_TEXT, 1);
+    snprintf(diag, sizeof(diag), "W:%lu H:%lu e:%d", header[2], header[3], (int)err);
+    fb_draw_string(4, 14, diag, COLOR_TEXT, 1);
+
     if (err != ESP_OK || header[0] != 0x4F444148) {
+        snprintf(diag, sizeof(diag), "BAD hdr! Stay");
+        fb_draw_string(4, 28, diag, COLOR_STATUS_ERR, 1);
+        fb_flush();
         ESP_LOGW("lcd", "Storage partition invalid (err=%d magic=%08lx)", err, header[0]);
-        lcd_draw_splash();
-        return;
+        return; // STAY on diagnostic screen
     }
 
     uint32_t count = header[1];
@@ -177,10 +192,16 @@ void lcd_load_random_splash(void) {
     uint32_t img_h = header[3];
 
     if (count == 0 || img_w != 320 || img_h != 172) {
+        snprintf(diag, sizeof(diag), "BAD dim! Stay");
+        fb_draw_string(4, 28, diag, COLOR_STATUS_ERR, 1);
+        fb_flush();
         ESP_LOGW("lcd", "Bad image params: count=%lu w=%lu h=%lu", count, img_w, img_h);
-        lcd_draw_splash();
-        return;
+        return; // STAY on diagnostic screen
     }
+
+    snprintf(diag, sizeof(diag), "OK loading...");
+    fb_draw_string(4, 28, diag, COLOR_STATUS_RUN, 1);
+    fb_flush();
 
     uint32_t img_bytes = img_w * img_h * 2;
     uint32_t idx;
@@ -210,8 +231,11 @@ void lcd_load_random_splash(void) {
         return;
     }
 
+    snprintf(diag, sizeof(diag), "READ ERR:%d STAY", (int)err);
+    fb_draw_string(4, 42, diag, COLOR_STATUS_ERR, 1);
+    fb_flush();
     ESP_LOGW("lcd", "Read failed: err=%d", err);
-    lcd_draw_splash();
+    // Stay on diagnostic screen, do NOT fall back to built-in splash
 }
 
 void lcd_display_init(void) {
@@ -273,7 +297,7 @@ void lcd_display_init(void) {
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     // ST7789 默认开启反相，需要显式关闭
-    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
+    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, true));
     ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(panel_handle, true));
     ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, false, true));
     // ST7789 GRAM 240x320, 物理屏幕 172x320

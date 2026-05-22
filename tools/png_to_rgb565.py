@@ -24,8 +24,7 @@ def png_to_rgb565(path, out_dir):
         for x in range(W):
             r, g, b = img.getpixel((x, y))
             rgb565 = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
-            inv = ~rgb565 & 0xFFFF
-            pixels.append(f"0x{inv:04X}")
+            pixels.append(f"0x{rgb565:04X}")
 
     base = os.path.splitext(os.path.basename(path))[0]
     out_path = os.path.join(out_dir, f"{base}.h")

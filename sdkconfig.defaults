@@ -38,5 +38,9 @@ CONFIG_USJ_ENABLE_USB_SERIAL_JTAG=n
 # Flash
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 
+# Partition table — use custom partitions.csv (not single_app defaults)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
 # Watchdog — relaxed during development
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=60
