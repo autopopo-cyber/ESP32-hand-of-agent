@@ -2,5 +2,8 @@ build/
 *.pyc
 __pycache__/
 .vscode/
-*. swp
+*.swp
 *.swo
+storage.bin
+main/splash.h
+.claude/settings.local.json
