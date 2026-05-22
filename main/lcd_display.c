@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_partition.h"
+#include "nvs_flash.h"
 #include "esp_random.h"
 #include "hid_executor.h"
 #include "tusb.h"
@@ -182,7 +183,19 @@ void lcd_load_random_splash(void) {
     }
 
     uint32_t img_bytes = img_w * img_h * 2;
-    uint32_t idx = (esp_random() ^ (uint32_t)esp_timer_get_time()) % count;
+    uint32_t idx;
+    nvs_handle_t nvs;
+    if (nvs_open("splash", NVS_READWRITE, &nvs) == ESP_OK) {
+        uint32_t boot_count = 0;
+        nvs_get_u32(nvs, "boot", &boot_count);
+        idx = boot_count % count;
+        boot_count++;
+        nvs_set_u32(nvs, "boot", boot_count);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    } else {
+        idx = esp_random() % count;
+    }
     uint32_t offset = 16 + idx * img_bytes;
 
     ESP_LOGI("lcd", "Loading splash %lu/%lu (offset=%lu)", idx + 1, count, offset);
