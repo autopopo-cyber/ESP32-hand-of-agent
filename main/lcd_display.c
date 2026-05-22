@@ -29,6 +29,9 @@
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
 
+static lcd_orientation_t s_orientation = LCD_ORIENT_UP;
+#define BTN_GPIO GPIO_NUM_0
+
 // 颜色定义 (RGB565)
 #define COLOR_BG          0x0000
 #define COLOR_STATUS_RUN  0x07E0  // 绿
@@ -40,12 +43,15 @@ static esp_lcd_panel_io_handle_t io_handle = NULL;
 #define COLOR_PROGRESS_BG 0x2104  // 深绿灰
 #define COLOR_PROGRESS_FG 0x07E0  // 绿
 
-uint16_t fb[LCD_H_RES * LCD_V_RES];
+// draw_buf: 工作缓冲区, 始终 UP 坐标, 所有绘制写这里
+uint16_t draw_buf[LCD_H_RES * LCD_V_RES];
+// disp_buf: 显示缓冲区, 由 draw_buf 按方向变换后输出到 ST7789
+static uint16_t disp_buf[LCD_H_RES * LCD_V_RES];
 
 // ---- Framebuffer 基础操作 ----
 
 static void fb_clear(uint16_t color) {
-    for (int i = 0; i < LCD_H_RES * LCD_V_RES; i++) fb[i] = color;
+    for (int i = 0; i < LCD_H_RES * LCD_V_RES; i++) draw_buf[i] = color;
 }
 
 static void fb_fill_rect(int x, int y, int w, int h, uint16_t color) {
@@ -55,7 +61,7 @@ static void fb_fill_rect(int x, int y, int w, int h, uint16_t color) {
     if (y + h > LCD_V_RES) h = LCD_V_RES - y;
     for (int row = y; row < y + h; row++) {
         for (int col = x; col < x + w; col++) {
-            fb[row * LCD_H_RES + col] = color;
+            draw_buf[row * LCD_H_RES + col] = color;
         }
     }
 }
@@ -70,10 +76,10 @@ static void fb_draw_char(int x, int y, char c, uint16_t color, uint8_t scale) {
             if (font_data[idx][bo] & (1 << bit)) {
                 for (int sy = 0; sy < scale; sy++) {
                     for (int sx = 0; sx < scale; sx++) {
-                        int px = x + (FONT_H - 1 - row) * scale + sy;  // 垂直
+                        int px = x + row * scale + sy;  // 垂直 (正向, 不再反行)
                         int py = y + col * scale + sx;  // 水平
                         if (px >= 0 && px < LCD_H_RES && py >= 0 && py < LCD_V_RES)
-                            fb[py * LCD_H_RES + px] = color;
+                            draw_buf[py * LCD_H_RES + px] = color;
                     }
                 }
             }
@@ -97,14 +103,42 @@ static void fb_draw_progress(int x, int y, int w, int h, uint8_t pct) {
 }
 
 void fb_flush(void) {
+    int total = LCD_H_RES * LCD_V_RES;
+    if (s_orientation == LCD_ORIENT_DOWN) {
+        for (int i = 0; i < total; i++) {
+            disp_buf[i] = draw_buf[total - 1 - i];
+        }
+    } else {
+        memcpy(disp_buf, draw_buf, total * 2);
+    }
     esp_lcd_panel_draw_bitmap(panel_handle, 0, 0,
-        LCD_H_RES, LCD_V_RES, fb);
+        LCD_H_RES, LCD_V_RES, disp_buf);
+}
+
+// ---- 方向切换 & 按钮 ----
+
+void lcd_set_orientation(lcd_orientation_t ori) {
+    s_orientation = ori;
+}
+
+lcd_orientation_t lcd_get_orientation(void) {
+    return s_orientation;
+}
+
+void lcd_check_button(void) {
+    static bool last_btn = true;
+    bool btn = gpio_get_level(BTN_GPIO);
+    if (last_btn && !btn) {
+        s_orientation = (s_orientation == LCD_ORIENT_UP)
+                        ? LCD_ORIENT_DOWN : LCD_ORIENT_UP;
+    }
+    last_btn = btn;
 }
 
 // ---- LCD 初始化 ----
 
 void lcd_draw_splash(void) {
-    memcpy(fb, splash_image, SPLASH_W * SPLASH_H * 2);
+    memcpy(draw_buf, splash_image, SPLASH_W * SPLASH_H * 2);
 
     // 底部黑色条 + 文字 (16px 字体)
     fb_fill_rect(0, 0, 22, 172, ~0x0000 & 0xFFFF);
@@ -124,6 +158,16 @@ void lcd_display_init(void) {
     };
     gpio_config(&bl_cfg);
     gpio_set_level(LCD_BL, 0); // 初始化时关背光
+
+    // BOOT 按钮 (GPIO0, 上拉, 按下=低电平)
+    gpio_config_t btn_cfg = {
+        .pin_bit_mask = (1ULL << BTN_GPIO),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&btn_cfg);
 
     // SPI 总线
     spi_bus_config_t spi_cfg = {
@@ -164,7 +208,7 @@ void lcd_display_init(void) {
     // ST7789 默认开启反相，需要显式关闭
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
     ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(panel_handle, true));
-    ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, false, true));
+    ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, false, false));
     // ST7789 GRAM 240x320, 物理屏幕 172x320
     // swap_xy 后: GRAM 320x240, 172 列→172 行(row gap=34), 320 行→320 列(col gap=0)
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, 0, 34));
@@ -273,6 +317,7 @@ void lcd_render_task(void *arg) {
         // (后续扩展阶段实现)
 
         lcd_display_update(&state);
+        lcd_check_button();
         vTaskDelay(pdMS_TO_TICKS(100)); // 10fps
     }
 }

@@ -11,5 +11,8 @@ void app_main(void) {
     lcd_display_init();
     lcd_draw_splash();
     ESP_LOGI(TAG, "[ok] Splash displayed");
-    while (1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
+    while (1) {
+        lcd_check_button();
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 }
