@@ -7,8 +7,8 @@ W, H = 320, 172
 
 def png_to_rgb565(path, out_dir):
     img = Image.open(path).convert("RGB")
-    # ROTATE_90: 竖版原图 → 横版填 320x172 帧缓冲 (UP 正向)
-    img = img.transpose(Image.ROTATE_90)
+    # ROTATE_270: 竖版原图 → 横版填 320x172 帧缓冲 (DOWN 基准)
+    img = img.transpose(Image.ROTATE_270)
 
     iw, ih = img.size
     scale = max(W / iw, H / ih)

@@ -11,6 +11,7 @@
 #include "font16.h"
 #include <stdio.h>
 #include <string.h>
+#include "esp_log.h"
 
 // Waveshare ESP32-S3-LCD-1.47 引脚
 #define LCD_MOSI  GPIO_NUM_45
@@ -29,7 +30,7 @@
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
 
-static lcd_orientation_t s_orientation = LCD_ORIENT_UP;
+static lcd_orientation_t s_orientation = LCD_ORIENT_DOWN;
 #define BTN_GPIO GPIO_NUM_0
 
 // 颜色定义 (RGB565)
@@ -76,7 +77,7 @@ static void fb_draw_char(int x, int y, char c, uint16_t color, uint8_t scale) {
             if (font_data[idx][bo] & (1 << bit)) {
                 for (int sy = 0; sy < scale; sy++) {
                     for (int sx = 0; sx < scale; sx++) {
-                        int px = x + row * scale + sy;  // 垂直 (正向, 不再反行)
+                        int px = x + (FONT_H - 1 - row) * scale + sy;  // 垂直 (mirror_y 补偿)
                         int py = y + col * scale + sx;  // 水平
                         if (px >= 0 && px < LCD_H_RES && py >= 0 && py < LCD_V_RES)
                             draw_buf[py * LCD_H_RES + px] = color;
@@ -125,12 +126,16 @@ lcd_orientation_t lcd_get_orientation(void) {
     return s_orientation;
 }
 
+static const char *TAG_BTN = "btn";
+
 void lcd_check_button(void) {
     static bool last_btn = true;
     bool btn = gpio_get_level(BTN_GPIO);
     if (last_btn && !btn) {
         s_orientation = (s_orientation == LCD_ORIENT_UP)
                         ? LCD_ORIENT_DOWN : LCD_ORIENT_UP;
+        ESP_LOGI(TAG_BTN, "toggle → %s", s_orientation == LCD_ORIENT_UP ? "UP" : "DOWN");
+        fb_flush();
     }
     last_btn = btn;
 }
@@ -208,7 +213,7 @@ void lcd_display_init(void) {
     // ST7789 默认开启反相，需要显式关闭
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
     ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(panel_handle, true));
-    ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, false, false));
+    ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, false, true));
     // ST7789 GRAM 240x320, 物理屏幕 172x320
     // swap_xy 后: GRAM 320x240, 172 列→172 行(row gap=34), 320 行→320 列(col gap=0)
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, 0, 34));
