@@ -182,7 +182,7 @@ void lcd_load_random_splash(void) {
     }
 
     uint32_t img_bytes = img_w * img_h * 2;
-    uint32_t idx = esp_random() % count;
+    uint32_t idx = (esp_random() ^ (uint32_t)esp_timer_get_time()) % count;
     uint32_t offset = 16 + idx * img_bytes;
 
     ESP_LOGI("lcd", "Loading splash %lu/%lu (offset=%lu)", idx + 1, count, offset);
