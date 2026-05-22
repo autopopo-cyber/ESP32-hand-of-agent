@@ -1,7 +1,6 @@
 idf_component_register(
     SRCS
         "main.c"
-        "usb_descriptors.c"
         "cdc_protocol.c"
         "hid_executor.c"
         "lcd_display.c"
@@ -10,6 +9,7 @@ idf_component_register(
         esp_tinyusb
         driver
         esp_lcd
-        nvs_flash
         esp_timer
+        nvs_flash
+        spi_flash
 )

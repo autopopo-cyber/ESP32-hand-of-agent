@@ -5,6 +5,8 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
+#include "esp_partition.h"
+#include "esp_random.h"
 #include "hid_executor.h"
 #include "tusb.h"
 #include "splash.h"
@@ -152,6 +154,53 @@ void lcd_draw_splash(void) {
     fb_flush();
 }
 
+void lcd_load_random_splash(void) {
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "storage");
+    if (!part) {
+        ESP_LOGW("lcd", "No storage partition, using built-in splash");
+        lcd_draw_splash();
+        return;
+    }
+
+    uint32_t header[4];
+    esp_err_t err = esp_partition_read(part, 0, header, sizeof(header));
+    if (err != ESP_OK || header[0] != 0x4F444148) {
+        ESP_LOGW("lcd", "Storage partition invalid (err=%d magic=%08lx)", err, header[0]);
+        lcd_draw_splash();
+        return;
+    }
+
+    uint32_t count = header[1];
+    uint32_t img_w = header[2];
+    uint32_t img_h = header[3];
+
+    if (count == 0 || img_w != 172 || img_h != 320) {
+        ESP_LOGW("lcd", "Bad image params: count=%lu w=%lu h=%lu", count, img_w, img_h);
+        lcd_draw_splash();
+        return;
+    }
+
+    uint32_t img_bytes = img_w * img_h * 2;
+    uint32_t idx = esp_random() % count;
+    uint32_t offset = 16 + idx * img_bytes;
+
+    ESP_LOGI("lcd", "Loading splash %lu/%lu (offset=%lu)", idx + 1, count, offset);
+
+    err = esp_partition_read(part, offset, draw_buf, img_bytes);
+    if (err == ESP_OK) {
+        char label[64];
+        snprintf(label, sizeof(label), "ODA HID #%lu/%lu", idx + 1, count);
+        fb_fill_rect(0, 0, 22, 172, ~0x0000 & 0xFFFF);
+        fb_draw_string(4, 4, label, ~0x07E0 & 0xFFFF, 1);
+        fb_flush();
+        return;
+    }
+
+    ESP_LOGW("lcd", "Read failed: err=%d", err);
+    lcd_draw_splash();
+}
+
 void lcd_display_init(void) {
     // Backlight GPIO
     gpio_config_t bl_cfg = {
@@ -295,34 +344,10 @@ void lcd_display_update(const lcd_state_t *state) {
 
 void lcd_render_task(void *arg) {
     lcd_display_init();
-
-    // 启动画面 (显示 2 秒)
-    lcd_draw_splash();
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    lcd_state_t state = {
-        .app_name = "oda_hid",
-        .step_name = "ready",
-        .usb_connected = false,
-        .yolo_online = false,
-    };
-    lcd_display_update(&state);
+    lcd_load_random_splash();
 
     while (1) {
-        hid_state_t hid;
-        hid_executor_get_state(&hid);
-
-        // 更新状态
-        state.last_seq = hid.last_seq;
-        state.cmd_pending = hid.cmd_queue_len;
-        state.usb_connected = tud_mounted();
-        state.elapsed_ms = (esp_timer_get_time() / 1000) - hid.last_action_ms;
-
-        // app_name / step_name / vlm_model 由 PC 端通过 CDC 扩展指令更新
-        // (后续扩展阶段实现)
-
-        lcd_display_update(&state);
         lcd_check_button();
-        vTaskDelay(pdMS_TO_TICKS(100)); // 10fps
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

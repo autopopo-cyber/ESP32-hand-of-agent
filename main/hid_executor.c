@@ -1,6 +1,6 @@
 #include "hid_executor.h"
 #include "tusb.h"
-#include "usb_descriptors.h"
+#include "class/hid/hid_device.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
@@ -146,21 +146,21 @@ static void process_one_command(void) {
 
     switch (cmd->opcode) {
     case CMD_MOUSE_MOVE: {
-        if (!tud_hid_n_ready(HID_INST_MOUSE)) return;
+        if (!tud_hid_ready()) return;
         int16_t dx = (int16_t)(cmd->payload[0] | (cmd->payload[1] << 8));
         int16_t dy = (int16_t)(cmd->payload[2] | (cmd->payload[3] << 8));
         g_state.mouse_x += dx;
         g_state.mouse_y += dy;
-        tud_hid_n_mouse_report(HID_INST_MOUSE, 0, g_state.mouse_buttons,
+        tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,g_state.mouse_buttons,
                                dx, dy, 0, 0);
         break;
     }
     case CMD_MOUSE_MOVE_TO: {
-        if (!tud_hid_n_ready(HID_INST_MOUSE)) return;
+        if (!tud_hid_ready()) return;
         uint16_t target_x = cmd->payload[0] | (cmd->payload[1] << 8);
         uint16_t target_y = cmd->payload[2] | (cmd->payload[3] << 8);
         for (int i = 0; i < 80; i++) {
-            tud_hid_n_mouse_report(HID_INST_MOUSE, 0, 0, -127, -127, 0, 0);
+            tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,0, -127, -127, 0, 0);
             vTaskDelay(pdMS_TO_TICKS(8));
         }
         int32_t dx = (int32_t)target_x;
@@ -168,7 +168,7 @@ static void process_one_command(void) {
         while (dx != 0 || dy != 0) {
             int8_t sx = (dx > 120) ? 120 : (dx < -120) ? -120 : (int8_t)dx;
             int8_t sy = (dy > 120) ? 120 : (dy < -120) ? -120 : (int8_t)dy;
-            tud_hid_n_mouse_report(HID_INST_MOUSE, 0, 0, sx, sy, 0, 0);
+            tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,0, sx, sy, 0, 0);
             dx -= sx; dy -= sy;
             vTaskDelay(pdMS_TO_TICKS(8));
         }
@@ -177,32 +177,32 @@ static void process_one_command(void) {
         break;
     }
     case CMD_MOUSE_CLICK: {
-        if (!tud_hid_n_ready(HID_INST_MOUSE)) return;
+        if (!tud_hid_ready()) return;
         uint8_t btn = cmd->payload[0];
-        tud_hid_n_mouse_report(HID_INST_MOUSE, 0, btn, 0, 0, 0, 0);
+        tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,btn, 0, 0, 0, 0);
         vTaskDelay(pdMS_TO_TICKS(20));
-        tud_hid_n_mouse_report(HID_INST_MOUSE, 0, 0, 0, 0, 0, 0);
+        tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,0, 0, 0, 0, 0);
         break;
     }
     case CMD_MOUSE_PRESS:
-        if (!tud_hid_n_ready(HID_INST_MOUSE)) return;
+        if (!tud_hid_ready()) return;
         g_state.mouse_buttons |= cmd->payload[0];
-        tud_hid_n_mouse_report(HID_INST_MOUSE, 0, g_state.mouse_buttons,
+        tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,g_state.mouse_buttons,
                                0, 0, 0, 0);
         break;
     case CMD_MOUSE_RELEASE:
-        if (!tud_hid_n_ready(HID_INST_MOUSE)) return;
+        if (!tud_hid_ready()) return;
         g_state.mouse_buttons &= ~cmd->payload[0];
-        tud_hid_n_mouse_report(HID_INST_MOUSE, 0, g_state.mouse_buttons,
+        tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,g_state.mouse_buttons,
                                0, 0, 0, 0);
         break;
     case CMD_MOUSE_SCROLL:
-        if (!tud_hid_n_ready(HID_INST_MOUSE)) return;
-        tud_hid_n_mouse_report(HID_INST_MOUSE, 0, g_state.mouse_buttons,
+        if (!tud_hid_ready()) return;
+        tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE,g_state.mouse_buttons,
                                0, 0, (int8_t)cmd->payload[0], 0);
         break;
     case CMD_KEY_PRESS: {
-        if (!tud_hid_n_ready(HID_INST_KBD)) return;
+        if (!tud_hid_ready()) return;
         uint8_t code = cmd->payload[0];
         for (int i = 0; i < 6; i++) {
             if (g_state.kb_keys[i] == 0) {
@@ -210,50 +210,50 @@ static void process_one_command(void) {
                 break;
             }
         }
-        tud_hid_n_keyboard_report(HID_INST_KBD, 0, g_state.kb_modifier,
+        tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD,g_state.kb_modifier,
                                   g_state.kb_keys);
         break;
     }
     case CMD_KEY_RELEASE: {
-        if (!tud_hid_n_ready(HID_INST_KBD)) return;
+        if (!tud_hid_ready()) return;
         uint8_t code = cmd->payload[0];
         for (int i = 0; i < 6; i++) {
             if (g_state.kb_keys[i] == code) {
                 g_state.kb_keys[i] = 0;
             }
         }
-        tud_hid_n_keyboard_report(HID_INST_KBD, 0, g_state.kb_modifier,
+        tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD,g_state.kb_modifier,
                                   g_state.kb_keys);
         break;
     }
     case CMD_KEY_TAP: {
-        if (!tud_hid_n_ready(HID_INST_KBD)) return;
+        if (!tud_hid_ready()) return;
         uint8_t code = cmd->payload[0];
         uint8_t count = cmd->payload[1];
         for (int i = 0; i < count; i++) {
             uint8_t tmp[6] = { code, 0, 0, 0, 0, 0 };
-            tud_hid_n_keyboard_report(HID_INST_KBD, 0, 0, tmp);
+            tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD,0, tmp);
             vTaskDelay(pdMS_TO_TICKS(10));
-            tud_hid_n_keyboard_report(HID_INST_KBD, 0, 0, NULL);
+            tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD,0, NULL);
             vTaskDelay(pdMS_TO_TICKS(10));
         }
         break;
     }
     case CMD_KEY_TYPE: {
-        if (!tud_hid_n_ready(HID_INST_KBD)) return;
+        if (!tud_hid_ready()) return;
         uint8_t count = cmd->payload[0];
         const char *str = (const char *)cmd->payload + 1;
         for (int i = 0; i < count; i++) {
             char c = str[i];
-            if (c < 0 || c > 127) continue;
+            if (c > 127) continue;
             uint8_t hid_code = ascii_to_hid[(uint8_t)c];
             if (hid_code == 0) continue;
 
             uint8_t modifier = char_needs_shift(c) ? 0x02 : 0x00;
             uint8_t keys[6] = { hid_code, 0, 0, 0, 0, 0 };
-            tud_hid_n_keyboard_report(HID_INST_KBD, 0, modifier, keys);
+            tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD,modifier, keys);
             vTaskDelay(pdMS_TO_TICKS(5));
-            tud_hid_n_keyboard_report(HID_INST_KBD, 0, 0, NULL);
+            tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD,0, NULL);
             vTaskDelay(pdMS_TO_TICKS(5));
         }
         break;
@@ -294,11 +294,9 @@ void hid_executor_release_all(void) {
     memset(g_state.kb_keys, 0, sizeof(g_state.kb_keys));
     g_state.kb_modifier = 0;
     g_state.mouse_buttons = 0;
-    if (tud_hid_n_ready(HID_INST_KBD)) {
-        tud_hid_n_keyboard_report(HID_INST_KBD, 0, 0, NULL);
-    }
-    if (tud_hid_n_ready(HID_INST_MOUSE)) {
-        tud_hid_n_mouse_report(HID_INST_MOUSE, 0, 0, 0, 0, 0, 0);
+    if (tud_hid_ready()) {
+        tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, NULL);
+        tud_hid_mouse_report(HID_ITF_PROTOCOL_MOUSE, 0, 0, 0, 0, 0);
     }
 }
 
