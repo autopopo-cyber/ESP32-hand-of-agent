@@ -157,7 +157,7 @@ void lcd_draw_splash(void) {
 
 void lcd_load_random_splash(void) {
     const esp_partition_t *part = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "storage");
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
     if (!part) {
         ESP_LOGW("lcd", "No storage partition, using built-in splash");
         lcd_draw_splash();
@@ -176,7 +176,7 @@ void lcd_load_random_splash(void) {
     uint32_t img_w = header[2];
     uint32_t img_h = header[3];
 
-    if (count == 0 || img_w != 172 || img_h != 320) {
+    if (count == 0 || img_w != 320 || img_h != 172) {
         ESP_LOGW("lcd", "Bad image params: count=%lu w=%lu h=%lu", count, img_w, img_h);
         lcd_draw_splash();
         return;

@@ -16,19 +16,25 @@ from PIL import Image
 
 
 def png_to_rgb565(img):
-    """Convert Pillow image to RGB565 bytes (172x320)."""
-    if img.size != (172, 320):
-        img = img.resize((172, 320), Image.LANCZOS)
+    """Convert Pillow image to RGB565 bytes (320x172, rotated for framebuffer)."""
+    img = img.transpose(Image.ROTATE_270)
+    iw, ih = img.size
+    scale = max(320 / iw, 172 / ih)
+    nw, nh = int(iw * scale), int(ih * scale)
+    img = img.resize((nw, nh), Image.LANCZOS)
+    left = (nw - 320) // 2
+    top = (nh - 172) // 2
+    img = img.crop((left, top, left + 320, top + 172))
     if img.mode != 'RGB':
         img = img.convert('RGB')
 
-    data = bytearray(172 * 320 * 2)
+    data = bytearray(320 * 172 * 2)
     pixels = img.load()
-    for y in range(320):
-        for x in range(172):
+    for y in range(172):
+        for x in range(320):
             r, g, b = pixels[x, y]
             rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-            off = (y * 172 + x) * 2
+            off = (y * 320 + x) * 2
             data[off] = rgb565 & 0xFF
             data[off + 1] = (rgb565 >> 8) & 0xFF
     return bytes(data)
@@ -53,8 +59,8 @@ def main():
         # Header
         f.write(struct.pack('<I', 0x4F444148))  # magic "ODAH"
         f.write(struct.pack('<I', len(pngs)))     # count
-        f.write(struct.pack('<I', 172))           # width
-        f.write(struct.pack('<I', 320))           # height
+        f.write(struct.pack('<I', 320))           # width
+        f.write(struct.pack('<I', 172))           # height
 
         for name in pngs:
             path = os.path.join(assets_dir, name)
